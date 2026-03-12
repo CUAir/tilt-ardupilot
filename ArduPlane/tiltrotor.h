@@ -67,8 +67,8 @@ public:
     bool motors_active() const { return enabled() && _motors_active; }
 
     // true if the tilts have completed slewing
-    // always return true if not enabled or not a continuous type
-    bool tilt_angle_achieved() const { return !enabled() || (type != TILT_TYPE_CONTINUOUS) || angle_achieved; }
+    // always return true if not enabled
+    bool tilt_angle_achieved() const { return !enabled() || angle_achieved; }
 
     // throttle of tilting motors used for forward flight
     bool get_forward_throttle(float &throttle) const;

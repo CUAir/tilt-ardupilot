@@ -93,6 +93,9 @@ const AP_Param::GroupInfo Tiltrotor::var_info[] = {
 Tiltrotor::Tiltrotor(QuadPlane& _quadplane, AP_MotorsMulticopter*& _motors):quadplane(_quadplane),motors(_motors)
 {
     AP_Param::setup_object_defaults(this, var_info);
+    current_tilt = 0;
+    current_throttle = 0;
+    angle_achieved = true;
 }
 
 void Tiltrotor::setup()
@@ -126,6 +129,7 @@ void Tiltrotor::setup()
         }
     }
 
+    // TODO: removes differential thrust for tilt rotors
     if (_is_vectored) {
         // we will be using vectoring for yaw
         motors->disable_yaw_torque();
@@ -164,25 +168,12 @@ float Tiltrotor::tilt_max_change(bool up, bool in_flap_range) const
     } else {
         rate = max_rate_down_dps;
     }
-    if (type != TILT_TYPE_BINARY && !up && !in_flap_range) {
-        bool fast_tilt = false;
-        if (plane.control_mode == &plane.mode_manual) {
-            fast_tilt = true;
-        }
-        if (plane.arming.is_armed_and_safety_off() && !quadplane.in_vtol_mode() && !quadplane.assisted_flight) {
-            fast_tilt = true;
-        }
-        if (fast_tilt) {
-            // allow a minimum of 90 DPS in manual or if we are not
-            // stabilising, to give fast control
-            rate = MAX(rate, 90);
-        }
-    }
     return rate * plane.G_Dt * (1/90.0);
 }
 
 /*
   output a slew limited tiltrotor angle. tilt is from 0 to 1
+  TODO here: if we want to change binary tilt rate
  */
 void Tiltrotor::slew(float newtilt)
 {
@@ -338,16 +329,16 @@ void Tiltrotor::continuous_update(void)
  */
 void Tiltrotor::binary_slew(bool forward)
 {
-    // The servo output is binary, not slew rate limited
-    SRV_Channels::set_output_scaled(SRV_Channel::k_motor_tilt, forward?1000:0);
-
-    // rate limiting current_tilt has the effect of delaying throttle in tiltrotor_binary_update
     float max_change = tilt_max_change(!forward);
     if (forward) {
         current_tilt = constrain_float(current_tilt+max_change, 0, 1);
     } else {
         current_tilt = constrain_float(current_tilt-max_change, 0, 1);
     }
+    angle_achieved = is_equal(forward ? 1.0f : 0.0f, current_tilt);
+
+    // The servo output is slew rate limited
+    SRV_Channels::set_output_scaled(SRV_Channel::k_motor_tilt, 1000 * current_tilt);
 }
 
 /*
@@ -385,6 +376,7 @@ void Tiltrotor::update(void)
         return;
     }
 
+    // HERE: continuous runs for vectored yaw as well? i think disabling the yaw just doesn't let it yaw
     if (type == TILT_TYPE_BINARY) {
         binary_update();
     } else {
