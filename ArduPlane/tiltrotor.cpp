@@ -457,7 +457,9 @@ void Tiltrotor::tilt_compensate_angle(float *thrust, uint8_t num_motors, float n
     }
 
     float largest_tilted = 0;
-    const float sin_tilt = sinf(radians(current_tilt*90));
+    const float tilt_rad = current_tilt * M_PI_2;
+    const float sin_tilt = sinf(tilt_rad);
+    const float cos_tilt = cosf(tilt_rad);
     // yaw_gain relates the amount of differential thrust we get from
     // tilt, so that the scaling of the yaw control is the same at any
     // tilt angle
@@ -469,7 +471,7 @@ void Tiltrotor::tilt_compensate_angle(float *thrust, uint8_t num_motors, float n
             // as we tilt we need to reduce the impact of the roll
             // controller. This simple method keeps the same average,
             // but moves us to no roll control as the angle increases
-            thrust[i] = current_tilt * avg_tilt_thrust + thrust[i] * (1-current_tilt);
+            thrust[i] = (1.0f - cos_tilt) * avg_tilt_thrust + thrust[i] * cos_tilt;
             // add in differential thrust for yaw control, scaled by tilt angle
             const float diff_thrust = motors->get_roll_factor(i) * (motors->get_yaw()+motors->get_yaw_ff()) * sin_tilt * yaw_gain;
             thrust[i] += diff_thrust;
