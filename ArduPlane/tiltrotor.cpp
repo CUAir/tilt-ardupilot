@@ -113,7 +113,7 @@ void Tiltrotor::setup()
 
     _is_vectored = tilt_mask != 0 && type == TILT_TYPE_VECTORED_YAW;
 
-    // true if a fixed forward motor is configured, either throttle, throttle left  or throttle right.
+    // true if a fixed forward motor is configured, either throttle, throttle left or throttle right.
     // bicopter tiltrotors use throttle left and right as tilting motors, so they don't count in that case.
     _have_fw_motor = SRV_Channels::function_assigned(SRV_Channel::k_throttle) ||
                     ((SRV_Channels::function_assigned(SRV_Channel::k_throttleLeft) || SRV_Channels::function_assigned(SRV_Channel::k_throttleRight))
@@ -383,6 +383,19 @@ void Tiltrotor::update(void)
         continuous_update();
     }
 
+    // fixed wing  We need to apply inverse scaling with throttle, and remove the surface speed scaling as
+        // we don't want tilt impacted by airspeed
+        const float scaler = plane.control_mode == &plane.mode_manual?1:(quadplane.FW_vector_throttle_scaling() / plane.get_speed_scaler());
+        const float gain = fixed_gain * fixed_tilt_limit * scaler;
+        const float right = gain * SRV_Channels::get_output_scaled(SRV_Channel::k_elevon_right) * (1/4500.0);
+        const float left  = gain * SRV_Channels::get_output_scaled(SRV_Channel::k_elevon_left) * (1/4500.0);
+        const float mid  = gain * SRV_Channels::get_output_scaled(SRV_Channel::k_elevator) * (1/4500.0);
+        SRV_Channels::set_output_scaled(SRV_Channel::k_tiltMotorLeft,1000 * constrain_float(base_output - right,0,1));
+        SRV_Channels::set_output_scaled(SRV_Channel::k_tiltMotorRight,1000 * constrain_float(base_output - left,0,1));
+        SRV_Channels::set_output_scaled(SRV_Channel::k_tiltMotorRearLeft,1000 * constrain_float(base_output + left,0,1));
+        SRV_Channels::set_output_scaled(SRV_Channel::k_tiltMotorRearRight,1000 * constrain_float(base_output + right,0,1));
+        SRV_Channels::set_output_scaled(SRV_Channel::k_tiltMotorRear,1000 * constrain_float(base_output + mid,0,1));
+
     if (type == TILT_TYPE_VECTORED_YAW) {
         vectoring();
     }
@@ -574,8 +587,8 @@ void Tiltrotor::vectoring(void)
                 // takes account of the MIXING_GAIN. The rear tilt is
                 // based on elevator
                 const float right = gain * SRV_Channels::get_output_scaled(SRV_Channel::k_elevon_right) * (1/4500.0);
-                const float left  = gain * SRV_Channels::get_output_scaled(SRV_Channel::k_elevon_left) * (1/4500.0);
-                const float mid  = gain * SRV_Channels::get_output_scaled(SRV_Channel::k_elevator) * (1/4500.0);
+                const float left = gain * SRV_Channels::get_output_scaled(SRV_Channel::k_elevon_left) * (1/4500.0);
+                const float mid = gain * SRV_Channels::get_output_scaled(SRV_Channel::k_elevator) * (1/4500.0);
                 // front tilt is effective canards, so need to swap and use negative. Rear motors are treated live elevons.
                 SRV_Channels::set_output_scaled(SRV_Channel::k_tiltMotorLeft,1000 * constrain_float(base_output - right,0,1));
                 SRV_Channels::set_output_scaled(SRV_Channel::k_tiltMotorRight,1000 * constrain_float(base_output - left,0,1));
@@ -600,7 +613,7 @@ void Tiltrotor::vectoring(void)
         SRV_Channels::set_output_scaled(SRV_Channel::k_tiltMotorRight,1000 * constrain_float(base_output - left,0,1));
         SRV_Channels::set_output_scaled(SRV_Channel::k_tiltMotorRearLeft,1000 * constrain_float(base_output + left,0,1));
         SRV_Channels::set_output_scaled(SRV_Channel::k_tiltMotorRearRight,1000 * constrain_float(base_output + right,0,1));
-        SRV_Channels::set_output_scaled(SRV_Channel::k_tiltMotorRear,  1000 * constrain_float(base_output + mid,0,1));
+        SRV_Channels::set_output_scaled(SRV_Channel::k_tiltMotorRear,1000 * constrain_float(base_output + mid,0,1));
     } else {
         const float yaw_out = motors->get_yaw()+motors->get_yaw_ff();
         const float roll_out = motors->get_roll()+motors->get_roll_ff();
