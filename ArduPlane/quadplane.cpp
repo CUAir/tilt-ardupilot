@@ -1539,6 +1539,14 @@ void SLT_Transition::update()
     switch (transition_state) {
     case State::AIRSPEED_WAIT: {
         quadplane.set_desired_spool_state(AP_Motors::DesiredSpoolState::THROTTLE_UNLIMITED);
+        if (quadplane.tiltrotor.disable_mc_control()) {
+            transition_state = State::TIMER;
+            transition_low_airspeed_ms = now;
+            airspeed_reached_tilt = quadplane.tiltrotor.current_tilt;
+            quadplane.assisted_flight = false;
+            break;
+        }
+
         // we hold in hover until the required airspeed is reached
         if (transition_start_ms == 0) {
             gcs().send_text(MAV_SEVERITY_INFO, "Transition airspeed wait");
@@ -1623,6 +1631,11 @@ void SLT_Transition::update()
 
     case State::TIMER: {
         quadplane.set_desired_spool_state(AP_Motors::DesiredSpoolState::THROTTLE_UNLIMITED);
+        if (quadplane.tiltrotor.disable_mc_control()) {
+            quadplane.assisted_flight = false;
+            break;
+        }
+
         // after airspeed is reached we degrade throttle over the transition time, but continue
         // to stabilize and wait for any required forward tilt to complete and the timer to expire
         const uint32_t transition_timer_ms = now - transition_low_airspeed_ms;
